@@ -1,0 +1,20 @@
+{
+  "test_queries": {
+    "valid_prompt": {
+      "description": "Valid prompt with clear intent",
+      "queries": ["def.*login", "class.*User", "def.*auth"]
+    },
+    "empty_prompt": {
+      "description": "Empty or ambiguous prompt",
+      "queries": [".*"]
+    },
+    "multi_query": {
+      "description": "Prompt generating multiple regex patterns",
+      "queries": ["def.*", "class.*", "import.*", "async.*", "def.*test"]
+    },
+    "edge_case": {
+      "description": "Edge case with special characters",
+      "queries": ["def.*\\s+\\w+", "class.*\\w+", "async.*def.*\\w+"]
+    }
+  }
+}

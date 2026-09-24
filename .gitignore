@@ -116,3 +116,9 @@ htmlcov/
 
 # Notebook outputs
 *.ipynb_checkpoints
+
+# Agent files
+AGENTS.md
+.serena/
+.github/
+memories/

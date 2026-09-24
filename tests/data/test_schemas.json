@@ -1,0 +1,49 @@
+{
+  "test_block_schemas": {
+    "valid_block": {
+      "description": "A valid block structure",
+      "schema": {
+        "required_fields": ["file", "start_line", "end_line", "lines"],
+        "optional_fields": ["score"],
+        "file": "string (absolute path)",
+        "start_line": "integer (0-indexed)",
+        "end_line": "integer (0-indexed)",
+        "lines": "array of strings",
+        "score": "float (optional, from AST ranking)"
+      }
+    },
+    "minimal_block": {
+      "description": "Minimal block with only required fields",
+      "schema": {
+        "required_fields": ["file", "start_line", "end_line", "lines"],
+        "optional_fields": ["score"],
+        "file": "string (absolute path)",
+        "start_line": "integer (0-indexed)",
+        "end_line": "integer (0-indexed)",
+        "lines": "array of strings",
+        "score": "float (optional, from AST ranking)"
+      }
+    }
+  },
+  "test_ranking_order": {
+    "description": "Expected ranking order for test blocks",
+    "ranking_rules": [
+      {
+        "rule": "Functions and classes get +5.0 score",
+        "priority": 1,
+        "capture_names": ["func_name", "class_name"]
+      },
+      {
+        "rule": "Identifiers get +0.5 score (if > 3 chars, not keyword)",
+        "priority": 2,
+        "capture_names": ["ident"]
+      },
+      {
+        "rule": "Regex fallback scores based on content",
+        "priority": 3,
+        "fallback": true
+      }
+    ],
+    "expected_sort": "descending by score"
+  }
+}

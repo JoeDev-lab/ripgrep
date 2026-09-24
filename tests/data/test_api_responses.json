@@ -1,0 +1,57 @@
+{
+  "test_api_responses": {
+    "openai_success": {
+      "description": "Valid OpenAI API response",
+      "response": {
+        "choices": [
+          {
+            "message": {
+              "content": "Found 3 authentication-related functions:\n\n1. `login()` in auth.py (Lines 10-25)\n2. `logout()` in auth.py (Lines 27-40)\n3. `authenticate_user()` in auth.py (Lines 42-55)\n\nThese functions handle user authentication and session management."
+            }
+          }
+        ]
+      }
+    },
+    "anthropic_success": {
+      "description": "Valid Anthropic API response",
+      "response": [
+        {
+          "content": [
+            {
+              "text": "Found 3 authentication-related functions:\n\n1. `login()` in auth.py (Lines 10-25)\n2. `logout()` in auth.py (Lines 27-40)\n3. `authenticate_user()` in auth.py (Lines 42-55)\n\nThese functions handle user authentication and session management."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "test_api_errors": {
+    "openai_error": {
+      "description": "OpenAI API error response",
+      "response": {
+        "error": {
+          "message": "Rate limit exceeded",
+          "type": "rate_limit_error",
+          "param": "none",
+          "code": "RATE_LIMITED"
+        }
+      }
+    },
+    "anthropic_error": {
+      "description": "Anthropic API error response",
+      "response": [
+        {
+          "content": [
+            {
+              "text": "Error: Rate limit exceeded"
+            }
+          ]
+        }
+      ]
+    },
+    "network_error": {
+      "description": "Network timeout error",
+      "response": null
+    }
+  }
+}

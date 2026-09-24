@@ -1,132 +1,142 @@
-# GrepRAG
+# GrepRAG: Index-Free Lexical Retrieval for Coding Agents
 
-**Index-Free Lexical Retrieval** methodology for codebase completion.
+A lightweight, drop-in Python module and FastMCP server implementing the **GrepRAG** methodology. It provides index-free, intent-driven codebase retrieval for local AI coding agents without the heavy overhead, cold-start delays, or context fragmentation of traditional Vector RAG systems.
 
-## Overview
+This project is a standalone, production-ready implementation inspired by the academic research behind GrepRAG, optimized for local agents and Model Context Protocol (MCP) clients.
 
-GrepRAG is a drop-in Python module that generates codebase grep queries via a local transformers model, retrieves structurally merged contexts using ripgrep natively, ranks blocks via Tree-Sitter AST (or Regex fallback), and coordinates external inference.
+## 🔗 Acknowledgements & Resources
+* **Original Paper:** [GrepRAG: Injecting Exact Lexical Context for Code Generation](https://arxiv.org/abs/2406.14497)
+* **Official Academic Repo:** [ZJU-ACES-ISE/greprag](https://github.com/ZJU-ACES-ISE/greprag)
+* **Specialized Grep Model:** [`greprag0/greprag-0.6b`](https://huggingface.co/greprag0/greprag-0.6b) (Distilled 0.6B Qwen model fine-tuned to output targeted regex queries).
 
-#TODO: Make 'paper' and 'repo' hyperlinks for the addresses below.
-Implemented from original paper and repo:
-  https://arxiv.org/html/2601.23254v2
-  https://github.com/ZJU-ACES-ISE/greprag
+---
 
-#TODO: Make 'model' hyperlink to address.
-pretrained greprag model:
-  https://huggingface.co/greprag0/greprag-0.6b
-  
+## How GrepRAG Works (Step-by-Step)
 
-## Key Features
+Traditional Vector RAG struggles with code because it relies on fuzzy semantic proximity, often slicing syntax trees into arbitrary chunks. GrepRAG behaves like an experienced developer using exact lexical and structural pattern matching across files:
 
-- **Intent-Driven Retrieval**: Uses an LLM to generate regex queries from natural language prompts
-- **Native Ripgrep**: Leverages ripgrep's speed and JSON output for efficient codebase scanning
-- **AST-Based Ranking**: Uses Tree-Sitter to parse and score code blocks by structural significance
-- **Fallback Scoring**: Gracefully falls back to regex-based scoring for unknown file types
-- **Multi-Language Support**: Pre-configured for Python, JavaScript/TypeScript, Go, Rust, Java, C#, C++, Ruby, PHP, and more
+1. **Intent-Driven Query Generation:** 
+   Instead of embedding the prompt, GrepRAG sends the request to a small, specialized local model (e.g., `greprag-0.6b`). The model outputs a targeted JSON array of regex search strings (e.g., `["def validate_payment", "class PaymentHandler"]`).
+2. **Multi-Query Lexical Retrieval (`ripgrep`):**
+   The queries are evaluated simultaneously in a single `ripgrep` subprocess. Ripgrep’s Rust engine scans the repository natively, enforces include/exclude globs at the C/Rust level, captures surrounding line context, and deduplicates overlapping match ranges.
+3. **AST-Aware Re-ranking (Tree-sitter):**
+   Grep results can include noisy matches (e.g., common identifiers like `id` or `config`). The pipeline parses matched blocks using language-specific Tree-sitter parsers, scoring them by syntactic importance (prioritizing class definitions, function signatures, and rare identifiers). If a specific language parser is not installed, it falls back to a regex heuristic scorer with a single warning.
+4. **Context Formatting & Inference:**
+   The top-scoring structural code blocks are merged into formatted snippets and sent alongside the user prompt to an external LLM (OpenAI or Anthropic compatible) to produce the final completion.
+
+---
 
 ## Installation
 
-1. Install dependencies:
+### 1. System Dependency
+The `ripgrep` executable must be available on your system `PATH`.
+* **Ubuntu/Debian:** `sudo apt-get install ripgrep`
+* **macOS:** `brew install ripgrep`
+* **Windows:** `choco install ripgrep`
 
+Verify installation:
 ```bash
-pip install -r requirements.txt
-```
-
-2. Ensure `ripgrep` (rg) is installed and in your PATH:
-
-```bash
-# Check if ripgrep is installed
 rg --version
 ```
 
-## Usage
+### 2. Python Package Installation
+Install directly from the source repository:
+```bash
+# Minimal install (core engine + regex fallback scoring)
+pip install .
 
-### Basic Example
+# Recommended: Install with all supported Tree-sitter language parsers
+pip install ".[all-languages]"
+```
 
+# Granular Language Installs
+If you want to keep dependencies small, you can install only the languages your project needs:
+```bash
+# Install specific language parsers
+pip install ".[python,typescript,go]"
+```
+Available extras: python, javascript, typescript, go, rust, java, c-sharp, cpp, c, ruby, php, and all-languages.
+
+# Development Install
+```bash
+pip install -e ".[all-languages,dev]"
+```
+
+### Usage
+# 1. As a Python Library
 ```python
-from grepRAG import GrepRAG
+from greprag import GrepRAG
 
-# Initialize the pipeline
+# Initialize pipeline
 rag = GrepRAG(
-    main_inference_url="https://your-inference-endpoint.com/v1/chat/completions",
-    main_model_name="your-main-model-name",
-    main_model_params={"max_tokens": 500, "temperature": 0.7},
-    grep_model_path_or_name="your-local-model-or-hf-id",
+    main_inference_url="[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)",
+    main_model_name="gpt-4o",
+    main_model_params={"temperature": 0.2, "max_tokens": 1024},
+    grep_model_path_or_name="greprag0/greprag-0.6b",
     external_api_type="openai",
-    external_api_key="your-api-key",
-    context_padding=2
+    external_api_key="sk-your-api-key",
+    whitelist=["*.py", "*.ts"],           # Optional: include globs
+    blacklist=["node_modules", ".git"],     # Optional: exclude globs
+    context_padding=3                     # Adjacent lines to merge
 )
 
-# Process a query
-result = rag.process(
-    prompt="Find all functions related to user authentication",
-    repo_path="/path/to/your/codebase",
-    top_k=20
+# Run retrieval + generation on a local repository
+prompt = "Where is webhook signature verification implemented, and how are expired timestamps handled?"
+repo_directory = "/path/to/your/codebase"
+
+response = rag.process(
+    prompt=prompt,
+    repo_path=repo_directory,
+    top_k=15
 )
 
-print(result)
+print(response)
 ```
 
-### Configuration Options
+# 2. Running as an MCP Server
+Once installed, the package provides a console script:
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `main_inference_url` | str | - | URL of the external inference server |
-| `main_model_name` | str | - | Model name for the main external generation |
-| `main_model_params` | dict | - | Generation parameters (e.g., `max_tokens`, `temperature`) |
-| `grep_model_path_or_name` | str | - | Path/identifier for the local HuggingFace grep model |
-| `external_api_type` | Literal["openai", "anthropic"] | - | Schema to use for the external API |
-| `external_api_key` | str | - | Authentication key for the external main model |
-| `whitelist` | Optional[list[str]] | None | File/dir wildcard patterns to strictly include |
-| `blacklist` | Optional[list[str]] | None | File/dir wildcard patterns to exclude |
-| `context_padding` | int | 2 | Number of adjacent lines to grab for context block merging |
+```bash
+# Set required credentials
+export GREPRAG_EXTERNAL_API_KEY="sk-your-api-key"
+export GREPRAG_EXTERNAL_API_TYPE="openai"
+export GREPRAG_MAIN_MODEL_NAME="gpt-4o"
 
-## Supported Languages
-
-The following languages are supported via Tree-Sitter parsers:
-
-- **Python** (`tree-sitter-python`)
-- **JavaScript/TypeScript** (`tree-sitter-javascript`, `tree-sitter-typescript`)
-- **Go** (`tree-sitter-go`)
-- **Rust** (`tree-sitter-rust`)
-- **Java** (`tree-sitter-java`)
-- **C#** (`tree-sitter-c-sharp`)
-- **C++** (`tree-sitter-cpp`)
-- **C** (`tree-sitter-c`)
-- **Ruby** (`tree-sitter-ruby`)
-- **PHP** (`tree-sitter-php`)
-
-**Note**: If a Tree-Sitter parser isn't installed for a specific language, GrepRAG will fall back to regex-based scoring with a warning logged.
-
-## Project Structure
-
-```
-grepRAG/
-├── __init__.py          # Package initialization
-├── grepRAG.py           # Main GrepRAG module
-├── requirements.txt     # Python dependencies
-├── example_usage.py     # Example usage script
-├── README.md            # This file
-└── .gitignore           # Git ignore patterns
+# Run the FastMCP server
+greprag-server
 ```
 
-## Dependencies
+# Claude Desktop Configuration (claude_desktop_config.json)
+Add the server to your configuration:
+```json
+{
+  "mcpServers": {
+    "greprag": {
+      "command": "greprag-server",
+      "env": {
+        "GREPRAG_EXTERNAL_API_KEY": "sk-your-api-key",
+        "GREPRAG_EXTERNAL_API_TYPE": "openai",
+        "GREPRAG_MAIN_MODEL_NAME": "gpt-4o",
+        "GREPRAG_GREP_MODEL_PATH": "greprag0/greprag-0.6b"
+      }
+    }
+  }
+}
+```
 
-- **Core**:
-  - `torch` (PyTorch)
-  - `transformers` (HuggingFace)
-  - `tree-sitter`
-  
-- **Language Parsers** (optional, for AST-based ranking):
-  - `tree-sitter-python`, `tree-sitter-javascript`, etc.
+# Exposed MCP Tools
+- greprag_query_and_answer(prompt, repo_path, top_k): Executes the full GrepRAG workflow and returns the external LLM's answer.
 
-- **System**:
-  - `ripgrep` (rg) - must be installed separately
+- greprag_retrieve_context(prompt, repo_path, top_k): Runs local grep generation, ripgrep search, and Tree-sitter ranking, returning raw formatted code blocks directly to the agent without invoking the external model.
 
-## License
-
-MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+### Environment Variables Reference
+Variable	                  | Default             	                      | Description
+GREPRAG_MAIN_INFERENCE_URL	| https://api.openai.com/v1/chat/completions  |	Inference endpoint URL
+GREPRAG_MAIN_MODEL_NAME	    | gpt-4o                                      |	Model name sent in request payload
+GREPRAG_MAIN_MODEL_PARAMS	  | {"temperature": 0.2, "max_tokens": 2048}    | JSON string of extra model parameters
+GREPRAG_EXTERNAL_API_TYPE	  | openai	                                    | Schema: openai or anthropic
+GREPRAG_EXTERNAL_API_KEY	  | (None - Required)	                          | API bearer token or x-api-key
+GREPRAG_GREP_MODEL_PATH	    | greprag0/greprag-0.6b                       |	Local or Hugging Face model identifier
+GREPRAG_WHITELIST	          | ""                                          |	Comma-separated include globs (e.g. *.py,*.ts)
+GREPRAG_BLACKLIST	          | .git,node_modules,venv,...                  |	Comma-separated exclude globs
+GREPRAG_CONTEXT_PADDING	    | 2	                                          | Ripgrep context lines (-C)

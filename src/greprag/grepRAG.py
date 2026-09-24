@@ -5,6 +5,7 @@ retrieves structurally merged contexts using ripgrep natively, ranks blocks via
 Tree-Sitter AST (or Regex fallback), and coordinates external inference.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -256,6 +257,19 @@ class GrepRAG:
             
         return blocks
 
+    async def _run_ripgrep_async(self, queries: list[str], repo_path: str) -> list[dict[str, Any]]:
+        """
+        Executes a single ripgrep pass asynchronously, letting the Rust binary natively deduplicate overlapping windows.
+        
+        Args:
+            queries (list[str]): Regex queries to evaluate simultaneously.
+            repo_path (str): Codebase root directory.
+            
+        Returns:
+            list[dict[str, Any]]: Structural blocks with file metadata and lines.
+        """
+        return await asyncio.to_thread(self._run_ripgrep, queries, repo_path)
+
     def _regex_fallback_score(self, content: str) -> float:
         """
         A heuristic scorer for unknown file extensions or uninstalled AST libraries.
@@ -405,6 +419,25 @@ class GrepRAG:
         """
         queries: list[str] = self._generate_grep_queries(prompt)
         blocks: list[dict[str, Any]] = self._run_ripgrep(queries, repo_path)
+        ranked_blocks: list[dict[str, Any]] = self._ast_weighted_rerank(blocks)
+        
+        formatted_context: str = self._format_context(ranked_blocks[:top_k])
+        return self._call_external_inference(prompt, formatted_context)
+
+    async def process_async(self, prompt: str, repo_path: str, top_k: int = 20) -> str:
+        """
+        The main pipeline execution asynchronously: Generates intents, executes grep, scores ASTs, and yields inference.
+        
+        Args:
+            prompt (str): The user's codebase intent.
+            repo_path (str): Local codebase root path.
+            top_k (int): Number of top-ranked context blocks to relay to the LLM.
+            
+        Returns:
+            str: External LLM response.
+        """
+        queries: list[str] = self._generate_grep_queries(prompt)
+        blocks: list[dict[str, Any]] = await self._run_ripgrep_async(queries, repo_path)
         ranked_blocks: list[dict[str, Any]] = self._ast_weighted_rerank(blocks)
         
         formatted_context: str = self._format_context(ranked_blocks[:top_k])
