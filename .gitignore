@@ -1,0 +1,118 @@
+# Byte-compiled / optimized / DLLs
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# MyPy / Type Checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# PyCharm's .idea directory (if not in parent)
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+htmlcov/
+.pytest_cache/
+.hypothesis/
+
+# Translations
+*.mo
+*.pot
+
+# Sphinx documentation
+build/
+doc/build/
+docs/_build/
+
+# IPython
+ipython_config.py
+profile_default/
+ipython_profile/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Ripgrep / Code search
+.grepRAG/
+rg/
+
+# Tree-sitter (if any compiled data)
+tree-sitter/
+
+# Local model files (if downloaded locally)
+models/
+local_models/
+checkpoints/
+
+# Environment variables (if generated)
+.env
+.env.local
+
+# Secrets / Keys
+*.pem
+*.key
+*.crt
+credentials.json
+
+# Jupyter Notebook outputs
+*.ipynb_checkpoints
+
+# Logging
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.cache
+
+# Downloaded dependencies
+downloads/
+tmp/
+
+# Docker
+docker-compose.override.yml
+docker-compose.override.json
+.docker/
+
+# Database files (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Test results
+.nox/
+.coverage
+htmlcov/
+.tox/
+.python-version
+
+# Notebook outputs
+*.ipynb_checkpoints
