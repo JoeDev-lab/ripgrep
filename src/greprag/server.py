@@ -4,11 +4,13 @@ Exposes index-free lexical retrieval and code generation as Model Context Protoc
 Configuration is loaded entirely from environment variables.
 """
 
-import os
 import json
 import logging
-from typing import List, Optional, Literal
+import os
+from typing import Any, Dict, List, Literal, Optional
+
 from mcp.server.fastmcp import FastMCP
+
 from greprag import GrepRAG
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -28,14 +30,14 @@ WHITELIST_RAW: str = os.getenv("GREPRAG_WHITELIST", "")
 BLACKLIST_RAW: str = os.getenv("GREPRAG_BLACKLIST", ".git,node_modules,venv,__pycache__,.pytest_cache")
 CONTEXT_PADDING: int = int(os.getenv("GREPRAG_CONTEXT_PADDING", "2"))
 
-WHITELIST: Optional[List[str]] = [w.strip() for w in WHITELIST_RAW.split(",") if w.strip()] or None
-BLACKLIST: Optional[List[str]] = [b.strip() for b in BLACKLIST_RAW.split(",") if b.strip()] or None
+WHITELIST: Optional[List[str]] = [w.strip() for w in WHITELIST_RAW.split(",") if w.strip()] or []
+BLACKLIST: Optional[List[str]] = [b.strip() for b in BLACKLIST_RAW.split(",") if b.strip()] or []
 
 try:
-    MAIN_MODEL_PARAMS = json.loads(MAIN_MODEL_PARAMS_RAW)
+    MAIN_MODEL_PARAMS: Dict[str, Any] = json.loads(MAIN_MODEL_PARAMS_RAW)
 except json.JSONDecodeError:
     logging.warning("Failed to parse GREPRAG_MAIN_MODEL_PARAMS as JSON. Defaulting to empty dict.")
-    MAIN_MODEL_PARAMS = {}
+    MAIN_MODEL_PARAMS: Dict[str, Any] = {}
 
 # --- Initialize GrepRAG Pipeline ---
 logging.info("Initializing GrepRAG core engine...")

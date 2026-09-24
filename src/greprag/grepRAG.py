@@ -6,22 +6,24 @@ Tree-Sitter AST (or Regex fallback), and coordinates external inference.
 """
 
 import asyncio
+import importlib
 import json
 import logging
 import os
 import re
 import subprocess
-import sys
-import urllib.request
+import urllib
+import urllib.error
+from subprocess import CompletedProcess
+from types import ModuleType
 from typing import Any, Literal
-import importlib
 
 logger = logging.getLogger(__name__)
 
 # External dependencies (required)
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from tree_sitter import Language, Parser, Query
+from tree_sitter import Language, Parser, Query, Tree
 
 
 class GrepRAG:
@@ -83,6 +85,7 @@ class GrepRAG:
         self._init_local_grep_model()
         self._init_tree_sitter()
 
+
     def _check_dependencies(self) -> None:
         """
         Verifies that required external system binaries (ripgrep) and parameters are available.
@@ -99,20 +102,22 @@ class GrepRAG:
         if not self.external_api_key:
             raise ValueError("An external API key must be provided.")
 
+
     def _init_local_grep_model(self) -> None:
         """
         Initializes the local transformers model and tokenizer for grep-query generation.
         Optimized for CUDA if available, falling back to CPU safely.
         """
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
-        dtype = torch.float16 if self._device == "cuda" else torch.float32
+        dtype: torch.dtype = torch.float16 if self._device == "cuda" else torch.float32
         
-        self._tokenizer = AutoTokenizer.from_pretrained(self.grep_model_path_or_name)
+        self._tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=self.grep_model_path_or_name)
         self._local_model = AutoModelForCausalLM.from_pretrained(
-            self.grep_model_path_or_name, 
+            pretrained_model_name_or_path=self.grep_model_path_or_name, 
             torch_dtype=dtype
         ).to(self._device)
         self._local_model.eval()
+
 
     def _init_tree_sitter(self) -> None:
         """
@@ -135,10 +140,10 @@ class GrepRAG:
 
         for ext, config in self._language_configs.items():
             try:
-                lang_module = importlib.import_module(config["module"])
+                lang_module: ModuleType = importlib.import_module(config["module"])
                 # Note: Handles `language()` export pattern standard in tree-sitter v0.21+
-                ts_language = Language(lang_module.language())
-                parser = Parser()
+                ts_language: Language = Language(lang_module.language())
+                parser: Parser = Parser()
                 parser.language = ts_language
                 
                 self._ts_queries[ext] = ts_language.query(config["query"])
@@ -146,8 +151,9 @@ class GrepRAG:
             except ImportError:
                 # Silently fail on init; we will log a warning during inference if the file is encountered
                 pass
-            except Exception:
-                logger.error("Failed to load configured tree-sitter for %s: %s", ext, sys.exc_info()[1])
+            except (RuntimeError, OSError, TypeError) as e:
+                logger.error("Failed to load configured tree-sitter for %s: %s", ext, e)
+
 
     def _generate_grep_queries(self, prompt: str) -> list[str]:
         """
@@ -179,13 +185,12 @@ class GrepRAG:
         
         try:
             clean_json: str = response.strip().strip("`").removeprefix("json").strip()
-            queries = json.loads(clean_json)
+            queries: list[Any] = json.loads(clean_json)
             if isinstance(queries, list):
                 return [str(q) for q in queries]
         except json.JSONDecodeError:
             return [line.strip() for line in response.splitlines() if line.strip()]
-            
-        return []
+
 
     def _run_ripgrep(self, queries: list[str], repo_path: str) -> list[dict[str, Any]]:
         """
@@ -218,24 +223,26 @@ class GrepRAG:
         last_line_num: int = -1
         
         try:
-            process = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            process: CompletedProcess[str] = subprocess.run(cmd, capture_output=True, text=True, check=False)
             for line in process.stdout.splitlines():
                 if not line.strip():
                     continue
                 try:
-                    parsed: dict[str, Any] = json.loads(line)
+                    parsed: dict[str, Any] = json.loads(s=line)
                     msg_type: str = parsed.get("type", "")
                     
                     if msg_type in ("match", "context"):
                         data: dict[str, Any] = parsed.get("data", {})
-                        file_path: str = data.get("path", {}).get("text", "")
+                        path_dict: dict[str, str] = data.get("path", {})
+                        file_path: str = path_dict.get("text", "")
                         line_num: int = data.get("line_number", 0)
-                        content: str = data.get("lines", {}).get("text", "").rstrip("\n")
+                        lines_dict: dict[str, str] = data.get("lines", {})
+                        content: str = lines_dict.get("text", "").rstrip("\n")
                         
                         if current_block is None or current_block["file"] != file_path or line_num > last_line_num + 1:
                             if current_block is not None:
                                 blocks.append(current_block)
-                            current_block = {
+                            current_block: dict[str, Any] = {
                                 "file": file_path,
                                 "start_line": line_num,
                                 "end_line": line_num,
@@ -245,17 +252,18 @@ class GrepRAG:
                             current_block["lines"].append(content)
                             current_block["end_line"] = line_num
                             
-                        last_line_num = line_num
+                        last_line_num: int = line_num
                 except json.JSONDecodeError:
                     continue
                     
             if current_block is not None:
                 blocks.append(current_block)
                 
-        except Exception:
-            logger.error("Ripgrep execution failed: %s", sys.exc_info()[1])
+        except (subprocess.SubprocessError, OSError) as e:
+            logger.error("Ripgrep execution failed: %s", e)
             
         return blocks
+
 
     async def _run_ripgrep_async(self, queries: list[str], repo_path: str) -> list[dict[str, Any]]:
         """
@@ -269,6 +277,7 @@ class GrepRAG:
             list[dict[str, Any]]: Structural blocks with file metadata and lines.
         """
         return await asyncio.to_thread(self._run_ripgrep, queries, repo_path)
+
 
     def _regex_fallback_score(self, content: str) -> float:
         """
@@ -290,6 +299,7 @@ class GrepRAG:
                 score += 0.5
         return score
 
+
     def _ast_weighted_rerank(self, blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Uses Tree-sitter parsing (or regex fallback) to score block significance.
@@ -304,7 +314,7 @@ class GrepRAG:
         for block in blocks:
             file_name: str = block.get("file", "")
             _, ext = os.path.splitext(file_name)
-            ext = ext.lower()
+            ext: str = ext.lower()
             code_text: bytes = bytes("\n".join(block["lines"]), "utf8")
             
             score: float = 0.0
@@ -313,8 +323,8 @@ class GrepRAG:
                 parser: Parser = self._ts_parsers[ext]
                 query: Query = self._ts_queries[ext]
                 
-                tree = parser.parse(code_text)
-                captures = query.captures(tree.root_node)
+                tree: Tree = parser.parse(code_text)
+                captures: Any = query.captures(tree.root_node)
                 
                 for node, capture_name in captures:
                     if capture_name in ("func_name", "class_name"):
@@ -326,15 +336,16 @@ class GrepRAG:
             else:
                 # Log warning if we mapped this extension but the user didn't pip install the module
                 if ext in self._language_configs and ext not in self._missing_lang_warned:
-                    module_name = self._language_configs[ext]["module"]
+                    module_name: str = self._language_configs[ext]["module"]
                     logger.warning("GrepRAG: '%s' is not installed. Falling back to Regex scoring for '%s' files.", module_name, ext)
                     self._missing_lang_warned.add(ext)
                     
-                score = self._regex_fallback_score("\n".join(block["lines"]))
+                score: float = self._regex_fallback_score(content="\n".join(block["lines"]))
                 
             block["score"] = score
             
         return sorted(blocks, key=lambda x: x.get("score", 0.0), reverse=True)
+
 
     def _format_context(self, blocks: list[dict[str, Any]]) -> str:
         """
@@ -347,6 +358,7 @@ class GrepRAG:
             context_str += "\n...\n"
         return context_str
 
+
     def _call_external_inference(self, prompt: str, context: str) -> str:
         """Routes prompt and context to the configured LLM API."""
         if self.external_api_type == "openai":
@@ -355,6 +367,7 @@ class GrepRAG:
             return self._call_anthropic(prompt, context)
         else:
             raise ValueError("Unsupported external API type.")
+
 
     def _call_openai(self, prompt: str, context: str) -> str:
         """OpenAI-compatible REST execution via pure stdlib urllib."""
@@ -372,13 +385,16 @@ class GrepRAG:
             **self.main_model_params
         }
         
-        req = urllib.request.Request(self.main_inference_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
+        req: Any = urllib.request.Request(self.main_inference_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
         try:
             with urllib.request.urlopen(req) as response:
-                result = json.loads(response.read().decode("utf-8"))
+                result = json.loads(s=response.read().decode("utf-8"))
                 return result["choices"][0]["message"]["content"]
-        except Exception as exc:
-            return f"Error calling OpenAI API: {exc!r}"
+        except json.JSONDecodeError:
+            return "Error: Invalid JSON response from OpenAI API."
+        except urllib.error.URLError as e:
+            return f"Error calling OpenAI API (URLError): {e!r}"
+
 
     def _call_anthropic(self, prompt: str, context: str) -> str:
         """Anthropic-compatible REST execution via pure stdlib urllib."""
@@ -397,13 +413,16 @@ class GrepRAG:
             **self.main_model_params
         }
         
-        req = urllib.request.Request(self.main_inference_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
+        req: Any = urllib.request.Request(self.main_inference_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
         try:
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read().decode("utf-8"))
                 return result["content"][0]["text"]
-        except Exception as exc:
-            return f"Error calling Anthropic API: {exc!r}"
+        except json.JSONDecodeError:
+            return "Error: Invalid JSON response from Anthropic API."
+        except urllib.error.URLError as e:
+            return f"Error calling Anthropic API (URLError): {e!r}"
+
 
     def process(self, prompt: str, repo_path: str, top_k: int = 20) -> str:
         """
@@ -421,8 +440,9 @@ class GrepRAG:
         blocks: list[dict[str, Any]] = self._run_ripgrep(queries, repo_path)
         ranked_blocks: list[dict[str, Any]] = self._ast_weighted_rerank(blocks)
         
-        formatted_context: str = self._format_context(ranked_blocks[:top_k])
-        return self._call_external_inference(prompt, formatted_context)
+        formatted_context: str = self._format_context(blocks=ranked_blocks[:top_k])
+        return self._call_external_inference(prompt, context=formatted_context)
+
 
     async def process_async(self, prompt: str, repo_path: str, top_k: int = 20) -> str:
         """
