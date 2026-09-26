@@ -44,7 +44,7 @@ class TestBlacklistFiltering:
             })()
             
             # Test with exclude all pattern
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 blacklist=["**/*.py"],
@@ -80,7 +80,7 @@ class TestBlacklistFiltering:
             })()
             
             # Test with directory pattern
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*nested"],
                 str(dummy_repo_path),
                 blacklist=["**/deeply_nested/**"],
@@ -116,7 +116,7 @@ class TestBlacklistFiltering:
             })()
             
             # Test with whitelist + blacklist
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=["**/*.py"],
@@ -153,7 +153,7 @@ class TestBlacklistFiltering:
             })()
             
             # Test with empty blacklist
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 blacklist=[],
@@ -189,7 +189,7 @@ class TestBlacklistFiltering:
             })()
             
             # Test with multiple patterns
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 blacklist=["**/auth.py", "**/models.py"],
@@ -225,7 +225,7 @@ class TestBlacklistFiltering:
             })()
             
             # Test with whitespace in pattern
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 blacklist=["  **/auth.py  "],

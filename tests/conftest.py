@@ -42,26 +42,42 @@ def create_grep_rag_instance(dummy_repo_path: Path) -> GrepRAG:
     Returns:
         GrepRAG: A GrepRAG instance configured for testing.
     """
-    # Use an absolute path to the test model
-    # __file__ is in tests/conftest.py, so parent is tests
-    test_model_path = (Path(__file__).parent / "fixtures" / "test_model" / "greprag-0.6b")
-    # Resolve to get the absolute path
-    test_model_path = test_model_path.resolve()
+    # Mock subprocess.run to avoid ripgrep check
+    original_run = subprocess.run
+    def mock_run(*args, **kwargs):
+        if args[0] == ["rg", "--version"]:
+            # Return a successful result (mocked)
+            class MockResult:
+                returncode = 0
+                stdout = b""
+                stderr = b""
+            return MockResult()
+        return original_run(*args, **kwargs)
+    subprocess.run = mock_run
     
-    return GrepRAG(
-        main_inference_url="https://test-endpoint.com/v1/chat/completions",
-        main_model_name="test-model",
-        main_model_params={
-            "max_tokens": 500,
-            "temperature": 0.7,
-        },
-        grep_model_path_or_name=test_model_path,
-        external_api_type="openai",
-        external_api_key="test-key",
-        whitelist=None,
-        blacklist=None,
-        context_padding=2,
-    )
+    try:
+        # Use an absolute path to the test model
+        # __file__ is in tests/conftest.py, so parent is tests
+        test_model_path = (Path(__file__).parent / "fixtures" / "greprag-0.6b")
+        # Resolve to get the absolute path
+        test_model_path = test_model_path.resolve()
+        
+        return GrepRAG(
+            main_inference_url="https://test-endpoint.com/v1/chat/completions",
+            main_model_name="Qwythos-9B",
+            main_model_params={
+                "max_tokens": 500,
+                "temperature": 0.7,
+            },
+            grep_model_path_or_name=str(test_model_path),
+            external_api_type="openai",
+            external_api_key="test-api-key",
+            whitelist=None,
+            blacklist=None,
+            context_padding=2,
+        )
+    finally:
+        subprocess.run = original_run
 
 
 @pytest.fixture

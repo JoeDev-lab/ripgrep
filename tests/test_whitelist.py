@@ -44,7 +44,7 @@ class TestWhitelistFiltering:
             })()
             
             # Test with empty whitelist
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=[],
@@ -80,7 +80,7 @@ class TestWhitelistFiltering:
             })()
             
             # Test with specific pattern
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=["**/auth.py"],
@@ -116,7 +116,7 @@ class TestWhitelistFiltering:
             })()
             
             # Test with directory pattern
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*nested"],
                 str(dummy_repo_path),
                 whitelist=["**/deeply_nested/**"],
@@ -152,7 +152,7 @@ class TestWhitelistFiltering:
             })()
             
             # Test with multiple patterns
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=["**/auth.py", "**/models.py"],
@@ -188,14 +188,14 @@ class TestWhitelistFiltering:
             })()
             
             # Test with empty list
-            result1 = create_grep_rag._run_ripgrep(
+            result1 = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=[],
             )
             
             # Test with None
-            result2 = create_grep_rag._run_ripgrep(
+            result2 = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=None,

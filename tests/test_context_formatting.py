@@ -54,7 +54,7 @@ class TestContextFormatting:
             },
         ]
         
-        result = create_grep_rag._format_context(blocks)
+        result = create_grep_rag_instance._format_context(blocks)
         
         # Verify formatting
         assert "File: test1.py" in result, "Should contain first file"
@@ -76,7 +76,7 @@ class TestContextFormatting:
             },
         ]
         
-        result = create_grep_rag._format_context(blocks)
+        result = create_grep_rag_instance._format_context(blocks)
         
         # Verify line ranges
         assert "Lines 1-5" in result, "Should contain line range"
@@ -95,7 +95,7 @@ class TestContextFormatting:
             },
         ]
         
-        result = create_grep_rag._format_context(blocks)
+        result = create_grep_rag_instance._format_context(blocks)
         
         # Verify empty blocks handled
         assert "File: test.py" in result, "Should contain file name"
@@ -114,7 +114,7 @@ class TestContextFormatting:
             },
         ]
         
-        result = create_grep_rag._format_context(blocks)
+        result = create_grep_rag_instance._format_context(blocks)
         
         # Verify trailing dots
         assert "..." in result, "Should contain trailing dots"

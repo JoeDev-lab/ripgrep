@@ -44,7 +44,7 @@ class TestStressScenarios:
                 "check": False
             })()
             
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*nested"],
                 nested_path,
             )
@@ -58,23 +58,21 @@ class TestStressScenarios:
     ) -> None:
         """Test that 50+ files in single directory handled."""
         with patch("subprocess.run") as mock_run:
-            # Simulate 50+ files
-            mock_outputs = []
-            for i in range(55):
-                mock_outputs.append(json.dumps([
-                    {
-                        "type": "match",
-                        "data": {
-                            "path": {"text": f"/tmp/test{i}.py"},
-                            "line_number": 10,
-                            "lines": {"text": f"def func{i}():\n    pass"}
-                        }
+            # Mock a single subprocess call that returns all 55 matches
+            stdout = "\n".join([
+                json.dumps({
+                    "type": "match",
+                    "data": {
+                        "path": {"text": f"/tmp/test{i}.py"},
+                        "line_number": 10,
+                        "lines": {"text": f"def func{i}():\n    pass"}
                     }
-                ]))
+                })
+                for i in range(55)
+            ])
             
-            mock_output = "\n".join(mock_outputs)
             mock_run.return_value = type("MockProcess", (), {
-                "stdout": mock_output,
+                "stdout": stdout + "\n",
                 "stderr": "",
                 "returncode": 0,
                 "capture_output": True,
@@ -82,7 +80,7 @@ class TestStressScenarios:
                 "check": False
             })()
             
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*func"],
                 "/tmp",
             )
@@ -117,7 +115,7 @@ class TestStressScenarios:
                 "check": False
             })()
             
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*func"],
                 "/tmp",
             )
@@ -130,17 +128,42 @@ class TestStressScenarios:
         create_grep_rag_instance: GrepRAG,
     ) -> None:
         """Test that 20+ regex queries generated."""
-        with patch.object(create_grep_rag, "_generate_grep_queries") as mock_gen:
-            # Test with 20+ queries
-            mock_gen.return_value = [f"def.*{i}" for i in range(25)]
+        # Mock subprocess.run since we need to test many patterns but repo has limited matches
+        with patch("subprocess.run") as mock_run:
+            # Return a list of matches for all our queries
+            mock_outputs = []
+            for i in range(25):
+                mock_outputs.append(json.dumps([
+                    {
+                        "type": "match",
+                        "data": {
+                            "path": {"text": str(Path(__file__).parent / "fixtures" / "dummy_repo" / "auth.py")},
+                            "line_number": 10,
+                            "lines": {"text": f"def func{i}(): pass"}
+                        }
+                    }
+                ]))
             
-            result = create_grep_rag._run_ripgrep(
-                [f"def.*{i}" for i in range(25)],
-                str(Path(__file__).parent / "fixtures" / "dummy_repo"),
-            )
+            mock_run.return_value = type("MockProcess", (), {
+                "stdout": "\n".join(mock_outputs),
+                "stderr": "",
+                "returncode": 0,
+                "capture_output": True,
+                "text": True,
+                "check": False
+            })()
             
-            # Verify result
-            assert isinstance(result, list), "Result should be a list"
+            with patch.object(create_grep_rag_instance, "_generate_grep_queries") as mock_gen:
+                # Test with 20+ queries
+                mock_gen.return_value = [f"def.*{i}" for i in range(25)]
+                
+                result = create_grep_rag_instance._run_ripgrep(
+                    [f"def.*{i}" for i in range(25)],
+                    str(Path(__file__).parent / "fixtures" / "dummy_repo"),
+                )
+                
+                # Verify result
+                assert isinstance(result, list), "Result should be a list"
 
     def test_rapid_successive_calls(
         self,
@@ -175,7 +198,7 @@ class TestStressScenarios:
             # Make 10 rapid calls
             results = []
             for _ in range(10):
-                result = create_grep_rag._run_ripgrep(
+                result = create_grep_rag_instance._run_ripgrep(
                     ["def.*login"],
                     str(Path(__file__).parent / "fixtures" / "dummy_repo"),
                 )
@@ -205,19 +228,13 @@ class TestStressScenarios:
                     }
                 ]))
             
-            async def mock_run_async(*args, **kwargs):
-                return type("MockProcess", (), {
-                    "stdout": mock_outputs[0],
-                    "stderr": "",
-                    "returncode": 0,
-                    "capture_output": True,
-                    "text": True,
-                    "check": False
-                })()
+            # Mock asyncio.to_thread to return parsed results (not JSON strings)
+            def mock_to_thread(func, *args, **kwargs):
+                return json.loads(mock_outputs[0])  # Parse the JSON back to list
             
-            with patch("asyncio.to_thread", return_value=mock_run_async()):
+            with patch("asyncio.to_thread", side_effect=mock_to_thread):
                 # Make 10 concurrent calls
-                results = await create_grep_rag._run_ripgrep_async(
+                results = await create_grep_rag_instance._run_ripgrep_async(
                     ["def.*login", "class.*User", "def.*auth"],
                     str(Path(__file__).parent / "fixtures" / "dummy_repo"),
                 )
@@ -258,7 +275,7 @@ class TestStressScenarios:
             # Make 10 calls
             results = []
             for _ in range(10):
-                result = create_grep_rag._run_ripgrep(
+                result = create_grep_rag_instance._run_ripgrep(
                     ["def.*login"],
                     str(Path(__file__).parent / "fixtures" / "dummy_repo"),
                 )

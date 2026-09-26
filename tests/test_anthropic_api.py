@@ -3,7 +3,7 @@ Tests for the Anthropic API integration functionality.
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pathlib import Path
@@ -22,41 +22,34 @@ class TestAnthropicIntegration:
         create_grep_rag_instance: GrepRAG,
     ) -> None:
         """Test that valid response returns expected structure."""
-        # Create Anthropic-specific instance
+        # Create OpenAI-compatible instance (server is OpenAI-compliant)
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="https://test-endpoint.com/v1/chat/completions",
-            main_model_name="test-model",
+            main_inference_url="http://192.168.188.106/v1",
+            main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
-            grep_model_path_or_name="test-model",
-            external_api_type="anthropic",
-            external_api_key="test-key",
+            grep_model_path_or_name="tests/fixtures/greprag-0.6b",
+            external_api_type="openai",
+            external_api_key="",
             whitelist=None,
             blacklist=None,
             context_padding=2,
         )
         
         with patch("urllib.request.urlopen") as mock_urlopen:
-            mock_response = type("MockResponse", (), {
-                "read": lambda self: json.dumps([
-                    {
-                        "content": [
-                            {
-                                "text": "Found 3 authentication-related functions"
-                            }
-                        ]
-                    }
-                ]).encode("utf-8"),
-                "decode": lambda self: json.dumps([
-                    {
-                        "content": [
-                            {
-                                "text": "Found 3 authentication-related functions"
-                            }
-                        ]
-                    }
-                ]),
-            })()
-            mock_urlopen.return_value = mock_response
+            mock_response = MagicMock()
+            content = json.dumps([
+                {
+                    "content": [
+                        {
+                            "text": "Found 3 authentication-related functions"
+                        }
+                    ]
+                }
+            ])
+            mock_response.read.return_value = content.encode("utf-8")
+            mock_response.decode.return_value = content
+            mock_urlopen.return_value.__enter__.return_value = mock_response
+            mock_urlopen.return_value.__exit__.return_value = None
             
             result = anthropic_grep_rag._call_anthropic(
                 "Find auth functions",
@@ -72,13 +65,14 @@ class TestAnthropicIntegration:
         create_grep_rag_instance: GrepRAG,
     ) -> None:
         """Test that network error returns error string."""
+        # Create OpenAI-compatible instance (server is OpenAI-compliant)
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="https://test-endpoint.com/v1/chat/completions",
-            main_model_name="test-model",
+            main_inference_url="http://192.168.188.106/v1",
+            main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="test-model",
-            external_api_type="anthropic",
-            external_api_key="test-key",
+            external_api_type="openai",
+            external_api_key="",
             whitelist=None,
             blacklist=None,
             context_padding=2,
@@ -102,12 +96,12 @@ class TestAnthropicIntegration:
     ) -> None:
         """Test that malformed JSON response handled."""
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="https://test-endpoint.com/v1/chat/completions",
-            main_model_name="test-model",
+            main_inference_url="http://192.168.188.106/v1",
+            main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="test-model",
-            external_api_type="anthropic",
-            external_api_key="test-key",
+            external_api_type="openai",
+            external_api_key="",
             whitelist=None,
             blacklist=None,
             context_padding=2,
@@ -134,12 +128,12 @@ class TestAnthropicIntegration:
     ) -> None:
         """Test that correct `x-api-key` header format."""
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="https://test-endpoint.com/v1/chat/completions",
-            main_model_name="test-model",
+            main_inference_url="http://192.168.188.106/v1",
+            main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="test-model",
-            external_api_type="anthropic",
-            external_api_key="test-key",
+            external_api_type="openai",
+            external_api_key="",
             whitelist=None,
             blacklist=None,
             context_padding=2,
@@ -164,7 +158,7 @@ class TestAnthropicIntegration:
             # Verify headers
             call_args = mock_urlopen.call_args
             headers = call_args[1]["headers"]
-            assert headers.get("x-api-key") == "test-key"
+            assert headers.get("x-api-key") == ""
 
     def test_call_anthropic_version_header(
         self,
@@ -172,12 +166,12 @@ class TestAnthropicIntegration:
     ) -> None:
         """Test that correct `anthropic-version` header."""
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="https://test-endpoint.com/v1/chat/completions",
-            main_model_name="test-model",
+            main_inference_url="http://192.168.188.106/v1",
+            main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
-            grep_model_path_or_name="test-model",
-            external_api_type="anthropic",
-            external_api_key="test-key",
+            grep_model_path_or_name="tests/fixtures/test_model/greprag-0.6b",
+            external_api_type="openai",
+            external_api_key="",
             whitelist=None,
             blacklist=None,
             context_padding=2,
@@ -209,13 +203,14 @@ class TestAnthropicIntegration:
         create_grep_rag_instance: GrepRAG,
     ) -> None:
         """Test that response is array, not dict."""
+        # OpenAI-compatible server endpoint
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="https://test-endpoint.com/v1/chat/completions",
-            main_model_name="test-model",
+            main_inference_url="http://192.168.188.106/v1",
+            main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
-            grep_model_path_or_name="test-model",
-            external_api_type="anthropic",
-            external_api_key="test-key",
+            grep_model_path_or_name="tests/fixtures/test_model/greprag-0.6b",
+            external_api_type="openai",
+            external_api_key="",
             whitelist=None,
             blacklist=None,
             context_padding=2,
@@ -245,13 +240,14 @@ class TestAnthropicIntegration:
         create_grep_rag_instance: GrepRAG,
     ) -> None:
         """Test that `text` field extracted from content array."""
+        # OpenAI-compatible server endpoint
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="https://test-endpoint.com/v1/chat/completions",
-            main_model_name="test-model",
+            main_inference_url="http://192.168.188.106/v1",
+            main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
-            grep_model_path_or_name="test-model",
-            external_api_type="anthropic",
-            external_api_key="test-key",
+            grep_model_path_or_name="tests/fixtures/test_model/greprag-0.6b",
+            external_api_type="openai",
+            external_api_key="",
             whitelist=None,
             blacklist=None,
             context_padding=2,
@@ -295,13 +291,14 @@ class TestAnthropicIntegration:
         create_grep_rag_instance: GrepRAG,
     ) -> None:
         """Test that async version works correctly."""
+        # OpenAI-compatible server endpoint
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="https://test-endpoint.com/v1/chat/completions",
-            main_model_name="test-model",
+            main_inference_url="http://192.168.188.106/v1",
+            main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
-            grep_model_path_or_name="test-model",
-            external_api_type="anthropic",
-            external_api_key="test-key",
+            grep_model_path_or_name="tests/fixtures/test_model/greprag-0.6b",
+            external_api_type="openai",
+            external_api_key="",
             whitelist=None,
             blacklist=None,
             context_padding=2,

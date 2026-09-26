@@ -54,7 +54,7 @@ class TestASTRanking:
             },
         ]
         
-        result = create_grep_rag._ast_weighted_rerank(blocks)
+        result = create_grep_rag_instance._ast_weighted_rerank(blocks)
         
         # Verify ranking
         assert len(result) == 2, "Should return 2 blocks"
@@ -76,7 +76,7 @@ class TestASTRanking:
             },
         ]
         
-        result = create_grep_rag._ast_weighted_rerank(blocks)
+        result = create_grep_rag_instance._ast_weighted_rerank(blocks)
         
         # Verify ranking
         assert len(result) == 1, "Should return 1 block"
@@ -101,7 +101,7 @@ class TestASTRanking:
             },
         ]
         
-        result = create_grep_rag._ast_weighted_rerank(blocks)
+        result = create_grep_rag_instance._ast_weighted_rerank(blocks)
         
         # Verify sorting
         assert len(result) == 2, "Should return 2 blocks"
@@ -123,7 +123,7 @@ class TestASTRanking:
             },
         ]
         
-        result = create_grep_rag._ast_weighted_rerank(blocks)
+        result = create_grep_rag_instance._ast_weighted_rerank(blocks)
         
         # Verify regex fallback
         assert len(result) == 1, "Should return 1 block"
@@ -144,10 +144,13 @@ class TestASTRanking:
                 },
             ]
             
-            result = create_grep_rag._ast_weighted_rerank(blocks)
-            
-            # Verify warning was called
+            result = create_grep_rag_instance._ast_weighted_rerank(blocks)
+
+            # Verify warning was called with expected message about missing parser
             assert mock_warn.called, "Warning should be logged"
+            call_args = mock_warn.call_args
+            assert "parser" in str(call_args).lower(), \
+                f"Warning message should mention 'parser', got: {call_args}"
 
     def test_score_accumulation(
         self,
@@ -163,7 +166,7 @@ class TestASTRanking:
             },
         ]
         
-        result = create_grep_rag._ast_weighted_rerank(blocks)
+        result = create_grep_rag_instance._ast_weighted_rerank(blocks)
         
         # Verify score accumulation
         assert len(result) == 1, "Should return 1 block"

@@ -44,7 +44,7 @@ class TestCombinedFiltering:
             })()
             
             # Test with whitelist first, then blacklist
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=["**/*.py"],
@@ -81,7 +81,7 @@ class TestCombinedFiltering:
             })()
             
             # Test with both empty
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=[],
@@ -118,7 +118,7 @@ class TestCombinedFiltering:
             })()
             
             # Test with whitelist `**/*`, blacklist specific
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=["**/*"],
@@ -155,7 +155,7 @@ class TestCombinedFiltering:
             })()
             
             # Test with blacklist `**/*`, whitelist specific
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 str(dummy_repo_path),
                 whitelist=["**/auth.py"],
@@ -192,7 +192,7 @@ class TestCombinedFiltering:
             })()
             
             # Test with nested pattern
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*nested"],
                 str(dummy_repo_path),
                 whitelist=["**/deeply_nested/**"],

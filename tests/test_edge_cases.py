@@ -34,7 +34,7 @@ class TestEdgeCases:
             })()
             
             # Test with non-existent directory
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*login"],
                 "/non/existent/path",
             )
@@ -48,10 +48,10 @@ class TestEdgeCases:
         dummy_repo_path: Path,
     ) -> None:
         """Test that empty string prompt produces minimal queries."""
-        with patch.object(create_grep_rag, "_generate_grep_queries") as mock_gen:
+        with patch.object(create_grep_rag_instance, "_generate_grep_queries") as mock_gen:
             mock_gen.return_value = [".*"]  # Minimal regex
             
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 [".*"],
                 str(dummy_repo_path),
             )
@@ -74,7 +74,7 @@ class TestEdgeCases:
         ]
         
         # Test with top_k=0
-        result = create_grep_rag._format_context(blocks[:0])
+        result = create_grep_rag_instance._format_context(blocks[:0])
         
         # Verify result
         assert result == "", "top_k=0 should return empty string"
@@ -95,7 +95,7 @@ class TestEdgeCases:
         ]
         
         # Test with top_k=1000 (larger than available blocks)
-        result = create_grep_rag._format_context(blocks[:1000])
+        result = create_grep_rag_instance._format_context(blocks[:1000])
         
         # Verify result
         assert "File: test0.py" in result, "Should contain first file"
@@ -115,7 +115,7 @@ class TestEdgeCases:
             },
         ]
         
-        result = create_grep_rag._format_context(blocks)
+        result = create_grep_rag_instance._format_context(blocks)
         
         # Verify Unicode handling
         assert "tests/测试/测试.py" in result, "Should contain Unicode filename"
@@ -125,11 +125,11 @@ class TestEdgeCases:
         create_grep_rag_instance: GrepRAG,
     ) -> None:
         """Test that multi-line regex queries work."""
-        with patch.object(create_grep_rag, "_generate_grep_queries") as mock_gen:
+        with patch.object(create_grep_rag_instance, "_generate_grep_queries") as mock_gen:
             # Test with multi-line regex
             mock_gen.return_value = ["def.*\\s+\\w+", "class.*\\w+", "async.*def.*\\w+"]
             
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*\\s+\\w+", "class.*\\w+", "async.*def.*\\w+"],
                 str(Path(__file__).parent / "fixtures" / "dummy_repo"),
             )
@@ -142,11 +142,11 @@ class TestEdgeCases:
         create_grep_rag_instance: GrepRAG,
     ) -> None:
         """Test that prompt with special characters handled."""
-        with patch.object(create_grep_rag, "_generate_grep_queries") as mock_gen:
+        with patch.object(create_grep_rag_instance, "_generate_grep_queries") as mock_gen:
             # Test with special characters
             mock_gen.return_value = ["def.*[a-z]+", "class.*[A-Z]+", "async.*def.*[a-z]+"]
             
-            result = create_grep_rag._run_ripgrep(
+            result = create_grep_rag_instance._run_ripgrep(
                 ["def.*[a-z]+", "class.*[A-Z]+", "async.*def.*[a-z]+"],
                 str(Path(__file__).parent / "fixtures" / "dummy_repo"),
             )
@@ -168,7 +168,7 @@ class TestEdgeCases:
             },
         ]
         
-        result = create_grep_rag._format_context(blocks)
+        result = create_grep_rag_instance._format_context(blocks)
         
         # Verify long lines handled
         assert "def" in result, "Should contain 'def'"
@@ -201,7 +201,7 @@ class TestEdgeCases:
             })()
             
             # Call async version
-            result = await create_grep_rag._run_ripgrep_async(
+            result = await create_grep_rag_instance._run_ripgrep_async(
                 ["def.*login"],
                 str(Path(__file__).parent / "fixtures" / "dummy_repo"),
             )

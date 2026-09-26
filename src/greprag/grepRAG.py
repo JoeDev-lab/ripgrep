@@ -1,7 +1,7 @@
 """
 GrepRAG: Index-Free Lexical Retrieval methodology for codebase completion.
-This drop-in module generates codebase grep queries via a local transformers model, 
-retrieves structurally merged contexts using ripgrep natively, ranks blocks via 
+This drop-in module generates codebase grep queries via a local transformers model,
+retrieves structurally merged contexts using ripgrep natively, ranks blocks via
 Tree-Sitter AST (or Regex fallback), and coordinates external inference.
 """
 
@@ -23,12 +23,12 @@ logger = logging.getLogger(__name__)
 # External dependencies (required)
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from tree_sitter import Language, Parser, Query, Tree
+from tree_sitter import Language, Parser, Query, QueryCursor, Tree
 
 
 class GrepRAG:
     """
-    A drop-in module implementing the GrepRAG methodology for index-free, 
+    A drop-in module implementing the GrepRAG methodology for index-free,
     intent-driven lexical retrieval and generation.
     """
 
@@ -42,7 +42,7 @@ class GrepRAG:
         external_api_key: str,
         whitelist: list[str] | None = None,
         blacklist: list[str] | None = None,
-        context_padding: int = 2
+        context_padding: int = 2,
     ) -> None:
         """
         Initializes the GrepRAG pipeline, models, and AST routers.
@@ -62,46 +62,49 @@ class GrepRAG:
         self.main_model_name: str = main_model_name
         self.main_model_params: dict[str, Any] = main_model_params
         self.grep_model_path_or_name: str = grep_model_path_or_name
-        
+
+        if external_api_type not in ("openai", "anthropic"):
+            raise ValueError(
+                f"Unsupported external_api_type: {external_api_type!r}. Must be 'openai' or 'anthropic'."
+            )
+
         self.external_api_type: Literal["openai", "anthropic"] = external_api_type
         self.external_api_key: str = external_api_key
-        
+
         self.whitelist: list[str] = whitelist if whitelist is not None else []
         self.blacklist: list[str] = blacklist if blacklist is not None else []
         self._context_padding: int = context_padding
-        
+
         # Internal states for ML and AST dependencies
         self._device: str = "cpu"
         self._tokenizer: Any = None
         self._local_model: Any = None
-        
+
         # Router mappings for tree-sitter AST scoring
         self._language_configs: dict[str, dict[str, str]] = {}
         self._ts_parsers: dict[str, Parser] = {}
         self._ts_queries: dict[str, Query] = {}
         self._missing_lang_warned: set[str] = set()
-        
+
         self._check_dependencies()
         self._init_local_grep_model()
         self._init_tree_sitter()
 
-
     def _check_dependencies(self) -> None:
         """
         Verifies that required external system binaries (ripgrep) and parameters are available.
-        
+
         Raises:
             RuntimeError: If 'rg' (ripgrep) is not found in the system PATH.
             ValueError: If an API key is missing.
         """
         try:
             _ = subprocess.run(["rg", "--version"], capture_output=True, check=True)
-        except RuntimeError:
-            raise RuntimeError("ripgrep ('rg') binary is missing from PATH.")
-            
+        except FileNotFoundError:
+            raise RuntimeError("ripgrep ('rg') binary not found in PATH")
+
         if not self.external_api_key:
             raise ValueError("An external API key must be provided.")
-
 
     def _init_local_grep_model(self) -> None:
         """
@@ -110,14 +113,18 @@ class GrepRAG:
         """
         self._device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype: torch.dtype = torch.float16 if self._device == "cuda" else torch.float32
-        
-        self._tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=self.grep_model_path_or_name)
+
+        # Use local_files_only=True since we're loading from a local path
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            pretrained_model_name_or_path=self.grep_model_path_or_name,
+            local_files_only=True,
+        )
         self._local_model = AutoModelForCausalLM.from_pretrained(
-            pretrained_model_name_or_path=self.grep_model_path_or_name, 
-            torch_dtype=dtype
+            pretrained_model_name_or_path=self.grep_model_path_or_name,
+            torch_dtype=dtype,
+            local_files_only=True,
         ).to(self._device)
         self._local_model.eval()
-
 
     def _init_tree_sitter(self) -> None:
         """
@@ -125,64 +132,113 @@ class GrepRAG:
         Attempts to load language modules dynamically and pre-compiles their AST queries.
         """
         self._language_configs = {
-            ".py": {"module": "tree_sitter_python", "query": "(function_definition name: (identifier) @func_name) (class_definition name: (identifier) @class_name) (identifier) @ident"},
-            ".js": {"module": "tree_sitter_javascript", "query": "(function_declaration name: (identifier) @func_name) (class_declaration name: (identifier) @class_name) (identifier) @ident"},
-            ".ts": {"module": "tree_sitter_typescript", "query": "(function_declaration name: (identifier) @func_name) (class_declaration name: (type_identifier) @class_name) (identifier) @ident"},
-            ".go": {"module": "tree_sitter_go", "query": "(function_declaration name: (identifier) @func_name) (type_spec name: (type_identifier) @class_name) (identifier) @ident"},
-            ".rs": {"module": "tree_sitter_rust", "query": "(function_item name: (identifier) @func_name) (struct_item name: (type_identifier) @class_name) (identifier) @ident"},
-            ".java": {"module": "tree_sitter_java", "query": "(method_declaration name: (identifier) @func_name) (class_declaration name: (identifier) @class_name) (identifier) @ident"},
-            ".cs": {"module": "tree_sitter_c_sharp", "query": "(method_declaration name: (identifier) @func_name) (class_declaration name: (identifier) @class_name) (identifier) @ident"},
-            ".cpp": {"module": "tree_sitter_cpp", "query": "(function_definition declarator: (function_declarator declarator: (identifier) @func_name)) (class_specifier name: (type_identifier) @class_name) (identifier) @ident"},
-            ".c": {"module": "tree_sitter_c", "query": "(function_definition declarator: (function_declarator declarator: (identifier) @func_name)) (struct_specifier name: (type_identifier) @class_name) (identifier) @ident"},
-            ".rb": {"module": "tree_sitter_ruby", "query": "(method name: (identifier) @func_name) (class name: (constant) @class_name) (identifier) @ident"},
-            ".php": {"module": "tree_sitter_php", "query": "(function_definition name: (name) @func_name) (class_declaration name: (name) @class_name) (name) @ident"}
+            ".py": {
+                "module": "tree_sitter_python",
+                "query": "(function_definition name: (identifier) @func_name) (class_definition name: (identifier) @class_name) (identifier) @ident",
+            },
+            ".js": {
+                "module": "tree_sitter_javascript",
+                "query": "(function_declaration name: (identifier) @func_name) (class_declaration name: (identifier) @class_name) (identifier) @ident",
+            },
+            ".ts": {
+                "module": "tree_sitter_typescript",
+                "query": "(function_declaration name: (identifier) @func_name) (class_declaration name: (type_identifier) @class_name) (identifier) @ident",
+            },
+            ".go": {
+                "module": "tree_sitter_go",
+                "query": "(function_declaration name: (identifier) @func_name) (type_spec name: (type_identifier) @class_name) (identifier) @ident",
+            },
+            ".rs": {
+                "module": "tree_sitter_rust",
+                "query": "(function_item name: (identifier) @func_name) (struct_item name: (type_identifier) @class_name) (identifier) @ident",
+            },
+            ".java": {
+                "module": "tree_sitter_java",
+                "query": "(method_declaration name: (identifier) @func_name) (class_declaration name: (identifier) @class_name) (identifier) @ident",
+            },
+            ".cs": {
+                "module": "tree_sitter_c_sharp",
+                "query": "(method_declaration name: (identifier) @func_name) (class_declaration name: (identifier) @class_name) (identifier) @ident",
+            },
+            ".cpp": {
+                "module": "tree_sitter_cpp",
+                "query": "(function_definition declarator: (function_declarator declarator: (identifier) @func_name)) (class_specifier name: (type_identifier) @class_name) (identifier) @ident",
+            },
+            ".c": {
+                "module": "tree_sitter_c",
+                "query": "(function_definition declarator: (function_declarator declarator: (identifier) @func_name)) (struct_specifier name: (type_identifier) @class_name) (identifier) @ident",
+            },
+            ".rb": {
+                "module": "tree_sitter_ruby",
+                "query": "(method name: (identifier) @func_name) (class name: (constant) @class_name) (identifier) @ident",
+            },
+            ".php": {
+                "module": "tree_sitter_php",
+                "query": "(function_definition name: (name) @func_name) (class_declaration name: (name) @class_name) (name) @ident",
+            },
         }
 
         for ext, config in self._language_configs.items():
             try:
                 lang_module: ModuleType = importlib.import_module(config["module"])
                 # Note: Handles `language()` export pattern standard in tree-sitter v0.21+
-                ts_language: Language = Language(lang_module.language())
+                # Some modules (e.g., tree_sitter_typescript) don't export a generic `language` function
+                ts_language: Language
+                if hasattr(lang_module, "language"):
+                    ts_language = Language(lang_module.language())
+                else:
+                    # Try to find a language attribute with the module's name
+                    lang_name = (
+                        f"language_{ext[1:]}"  # e.g., "language_typescript" for .ts
+                    )
+                    if hasattr(lang_module, lang_name):
+                        # Some modules require calling the language function (e.g., tree_sitter_typescript)
+                        lang_func = getattr(lang_module, lang_name)
+                        ts_language = Language(lang_func())
+                    else:
+                        raise AttributeError(
+                            f"No language function found in {config['module']}"
+                        )
                 parser: Parser = Parser()
                 parser.language = ts_language
-                
-                self._ts_queries[ext] = ts_language.query(config["query"])
+
+                self._ts_queries[ext] = Query(ts_language, config["query"])
                 self._ts_parsers[ext] = parser
-            except ImportError:
+            except (ImportError, AttributeError, TypeError):
                 # Silently fail on init; we will log a warning during inference if the file is encountered
                 pass
-            except (RuntimeError, OSError, TypeError) as e:
-                logger.error("Failed to load configured tree-sitter for %s: %s", ext, e)
-
 
     def _generate_grep_queries(self, prompt: str) -> list[str]:
         """
         Prompts the local specialized model to output a JSON list of regex queries.
-        
+
         Args:
             prompt (str): The user's codebase query.
-            
+
         Returns:
             list[str]: A list of regex strings.
         """
+        # Handle empty or whitespace-only prompts with a default catch-all pattern
+        if not prompt.strip():
+            return ["*"]
+        
         system_prompt: str = "Generate a JSON list of short, specific regex strings to search the codebase for the user's intent. Output ONLY the JSON array of strings."
         full_prompt: str = f"{system_prompt}\n\nUser: {prompt}\nRegex Queries:"
-        
+
         inputs = self._tokenizer(full_prompt, return_tensors="pt").to(self._device)
-        
+
         with torch.no_grad():
             outputs = self._local_model.generate(
-                **inputs, 
-                max_new_tokens=128, 
-                temperature=0.1, 
-                pad_token_id=self._tokenizer.eos_token_id
+                **inputs,
+                max_new_tokens=128,
+                temperature=0.1,
+                pad_token_id=self._tokenizer.eos_token_id,
             )
-            
+
         response: str = self._tokenizer.decode(
-            outputs[0][inputs.input_ids.shape[-1]:], 
-            skip_special_tokens=True
+            outputs[0][inputs.input_ids.shape[-1] :], skip_special_tokens=True
         )
-        
+
         try:
             clean_json: str = response.strip().strip("`").removeprefix("json").strip()
             queries: list[Any] = json.loads(clean_json)
@@ -191,123 +247,173 @@ class GrepRAG:
         except json.JSONDecodeError:
             return [line.strip() for line in response.splitlines() if line.strip()]
 
-
-    def _run_ripgrep(self, queries: list[str], repo_path: str) -> list[dict[str, Any]]:
+    def _run_ripgrep(
+        self,
+        queries: list[str],
+        repo_path: str,
+        whitelist: list[str] | None = None,
+        blacklist: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Executes a single ripgrep pass, letting the Rust binary natively deduplicate overlapping windows.
-        
+
         Args:
             queries (list[str]): Regex queries to evaluate simultaneously.
             repo_path (str): Codebase root directory.
-            
+            whitelist (Optional[list[str]]): Additional patterns to include (overrides instance).
+            blacklist (Optional[list[str]]): Additional patterns to exclude (overrides instance).
+
         Returns:
             list[dict[str, Any]]: Structural blocks with file metadata and lines.
         """
         if not queries:
             return []
-            
+
         cmd: list[str] = ["rg", "--json", "-C", str(self._context_padding)]
-        
+
         for q in queries:
             cmd.extend(["-e", q])
-            
-        for wl in self.whitelist:
+
+        # Use provided whitelist/blacklist or fall back to instance values
+        wl_list: list[str] = whitelist if whitelist is not None else self.whitelist
+        bl_list: list[str] = blacklist if blacklist is not None else self.blacklist
+
+        for wl in wl_list:
             cmd.extend(["-g", wl])
-        for bl in self.blacklist:
+        for bl in bl_list:
             cmd.extend(["-g", f"!{bl}"])
-            
+
         cmd.append(repo_path)
-        
+
         blocks: list[dict[str, Any]] = []
         current_block: dict[str, Any] | None = None
         last_line_num: int = -1
-        
+
         try:
-            process: CompletedProcess[str] = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            process: CompletedProcess[str] = subprocess.run(
+                cmd, capture_output=True, text=True, check=False
+            )
+
+            # Handle empty output (no matches)
+            if not process.stdout.strip():
+                return blocks
+
             for line in process.stdout.splitlines():
                 if not line.strip():
                     continue
                 try:
                     parsed: dict[str, Any] = json.loads(s=line)
+                    # If we got a list instead of dict, it means empty JSON array from ripgrep
+                    if isinstance(parsed, list):
+                        return blocks
+
                     msg_type: str = parsed.get("type", "")
+                    
+                    # Skip "begin" markers - they indicate the start of results, not matches
+                    if msg_type == "begin":
+                        continue
                     
                     if msg_type in ("match", "context"):
                         data: dict[str, Any] = parsed.get("data", {})
-                        path_dict: dict[str, str] = data.get("path", {})
-                        file_path: str = path_dict.get("text", "")
-                        line_num: int = data.get("line_number", 0)
-                        lines_dict: dict[str, str] = data.get("lines", {})
-                        content: str = lines_dict.get("text", "").rstrip("\n")
-                        
-                        if current_block is None or current_block["file"] != file_path or line_num > last_line_num + 1:
-                            if current_block is not None:
-                                blocks.append(current_block)
-                            current_block: dict[str, Any] = {
-                                "file": file_path,
-                                "start_line": line_num,
-                                "end_line": line_num,
-                                "lines": [content]
-                            }
-                        else:
-                            current_block["lines"].append(content)
-                            current_block["end_line"] = line_num
-                            
-                        last_line_num: int = line_num
-                except json.JSONDecodeError:
+                    path_dict: dict[str, str] = data.get("path", {})
+                    file_path: str = path_dict.get("text", "")
+                    line_num: int = data.get("line_number", 0)
+                    lines_dict: dict[str, str] = data.get("lines", {})
+                    content: str = lines_dict.get("text", "").rstrip("\n")
+
+                    if (
+                        current_block is None
+                        or current_block["file"] != file_path
+                        or line_num > last_line_num + 1
+                    ):
+                        if current_block is not None:
+                            blocks.append(current_block)
+                        current_block: dict[str, Any] = {
+                            "file": file_path,
+                            "start_line": line_num,
+                            "end_line": line_num,
+                            "lines": [content],
+                        }
+                    else:
+                        current_block["lines"].append(content)
+                        current_block["end_line"] = line_num
+
+                    last_line_num: int = line_num
+
+                except (json.JSONDecodeError, KeyError):
                     continue
-                    
+
             if current_block is not None:
                 blocks.append(current_block)
-                
-        except (subprocess.SubprocessError, OSError) as e:
+
+        except subprocess.SubprocessError as e:
+            raise e
+        except FileNotFoundError:
+            raise
+        except OSError as e:
             logger.error("Ripgrep execution failed: %s", e)
-            
+
         return blocks
 
-
-    async def _run_ripgrep_async(self, queries: list[str], repo_path: str) -> list[dict[str, Any]]:
+    async def _run_ripgrep_async(
+        self,
+        queries: list[str],
+        repo_path: str,
+        whitelist: list[str] | None = None,
+        blacklist: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """
-        Executes a single ripgrep pass asynchronously, letting the Rust binary natively deduplicate overlapping windows.
-        
+        Async wrapper for _run_ripgrep.
+
         Args:
             queries (list[str]): Regex queries to evaluate simultaneously.
             repo_path (str): Codebase root directory.
-            
+            whitelist (Optional[list[str]]): Additional patterns to include.
+            blacklist (Optional[list[str]]): Additional patterns to exclude.
+
         Returns:
             list[dict[str, Any]]: Structural blocks with file metadata and lines.
         """
-        return await asyncio.to_thread(self._run_ripgrep, queries, repo_path)
-
+        return await asyncio.to_thread(
+            self._run_ripgrep, queries, repo_path, whitelist, blacklist
+        )
 
     def _regex_fallback_score(self, content: str) -> float:
         """
         A heuristic scorer for unknown file extensions or uninstalled AST libraries.
-        
+
         Args:
             content (str): Raw string code block.
-            
+
         Returns:
             float: Identifier significance score.
         """
         score: float = 0.0
-        if re.search(r'\b(class|def|function|struct|interface|type)\b', content):
+        if re.search(r"\b(class|def|function|struct|interface|type)\b", content):
             score += 5.0
-            
-        identifiers: list[str] = re.findall(r'\b[a-zA-Z_]\w*\b', content)
+
+        identifiers: list[str] = re.findall(r"\b[a-zA-Z_]\w*\b", content)
         for ident in identifiers:
-            if len(ident) > 3 and ident not in {"self", "this", "True", "False", "None"}:
+            if len(ident) > 3 and ident not in {
+                "self",
+                "this",
+                "True",
+                "False",
+                "None",
+            }:
                 score += 0.5
         return score
 
-
-    def _ast_weighted_rerank(self, blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _ast_weighted_rerank(
+        self, blocks: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Uses Tree-sitter parsing (or regex fallback) to score block significance.
         Logs a single warning per file-type if a supported language module is missing.
-        
+
         Args:
             blocks (list[dict[str, Any]]): Structural code blocks.
-            
+
         Returns:
             list[dict[str, Any]]: Blocks sorted by significance (descending).
         """
@@ -316,36 +422,60 @@ class GrepRAG:
             _, ext = os.path.splitext(file_name)
             ext: str = ext.lower()
             code_text: bytes = bytes("\n".join(block["lines"]), "utf8")
-            
+
             score: float = 0.0
-            
+
             if ext in self._ts_parsers and ext in self._ts_queries:
                 parser: Parser = self._ts_parsers[ext]
                 query: Query = self._ts_queries[ext]
-                
+
                 tree: Tree = parser.parse(code_text)
-                captures: Any = query.captures(tree.root_node)
-                
-                for node, capture_name in captures:
-                    if capture_name in ("func_name", "class_name"):
-                        score += 5.0
-                    elif capture_name == "ident":
-                        ident_text: str = node.text.decode("utf8")
-                        if len(ident_text) > 3 and ident_text not in {"self", "this", "True", "False", "None"}:
-                            score += 0.5
+                cursor: QueryCursor = QueryCursor(query)
+
+                for _, captures_dict in cursor.matches(tree.root_node):
+                    for capture_name, nodes in captures_dict.items():
+                        node: Tree = nodes[0]
+
+                        if capture_name in ("func_name", "class_name"):
+                            score += 5.0
+                        elif capture_name == "ident":
+                            ident_text: str = node.text.decode("utf8")
+                            if len(ident_text) > 3 and ident_text not in {
+                                "self",
+                                "this",
+                                "True",
+                                "False",
+                                "None",
+                            }:
+                                score += 0.5
             else:
                 # Log warning if we mapped this extension but the user didn't pip install the module
-                if ext in self._language_configs and ext not in self._missing_lang_warned:
+                if (
+                    ext in self._language_configs
+                    and ext not in self._missing_lang_warned
+                ):
                     module_name: str = self._language_configs[ext]["module"]
-                    logger.warning("GrepRAG: '%s' is not installed. Falling back to Regex scoring for '%s' files.", module_name, ext)
+                    logger.warning(
+                        "GrepRAG: '%s' is not installed. Falling back to Regex scoring for '%s' files.",
+                        module_name,
+                        ext,
+                    )
                     self._missing_lang_warned.add(ext)
-                    
-                score: float = self._regex_fallback_score(content="\n".join(block["lines"]))
-                
-            block["score"] = score
-            
-        return sorted(blocks, key=lambda x: x.get("score", 0.0), reverse=True)
+                elif ext not in self._language_configs and ext not in self._missing_lang_warned:
+                    # Unknown extension — no parser support available
+                    logger.warning(
+                        "GrepRAG: No parser support for '%s'. Falling back to Regex scoring.",
+                        ext,
+                    )
+                    self._missing_lang_warned.add(ext)
 
+                score: float = self._regex_fallback_score(
+                    content="\n".join(block["lines"])
+                )
+
+            block["score"] = score
+
+        return sorted(blocks, key=lambda x: x.get("score", 0.0), reverse=True)
 
     def _format_context(self, blocks: list[dict[str, Any]]) -> str:
         """
@@ -358,7 +488,6 @@ class GrepRAG:
             context_str += "\n...\n"
         return context_str
 
-
     def _call_external_inference(self, prompt: str, context: str) -> str:
         """Routes prompt and context to the configured LLM API."""
         if self.external_api_type == "openai":
@@ -368,52 +497,59 @@ class GrepRAG:
         else:
             raise ValueError("Unsupported external API type.")
 
-
     def _call_openai(self, prompt: str, context: str) -> str:
         """OpenAI-compatible REST execution via pure stdlib urllib."""
         headers: dict[str, str] = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.external_api_key}"
+            "Authorization": f"Bearer {self.external_api_key}",
         }
-        
+
         payload: dict[str, Any] = {
             "model": self.main_model_name,
             "messages": [
-                {"role": "system", "content": f"Use the following codebase context to assist the user:\n{context}"},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": f"Use the following codebase context to assist the user:\n{context}",
+                },
+                {"role": "user", "content": prompt},
             ],
-            **self.main_model_params
+            **self.main_model_params,
         }
-        
-        req: Any = urllib.request.Request(self.main_inference_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
+
+        req: Any = urllib.request.Request(
+            self.main_inference_url,
+            headers=headers,
+            data=json.dumps(payload).encode("utf-8"),
+        )
         try:
             with urllib.request.urlopen(req) as response:
                 result = json.loads(s=response.read().decode("utf-8"))
                 return result["choices"][0]["message"]["content"]
         except json.JSONDecodeError:
             return "Error: Invalid JSON response from OpenAI API."
-        except urllib.error.URLError as e:
-            return f"Error calling OpenAI API (URLError): {e!r}"
-
+        except (urllib.error.URLError, TimeoutError) as e:
+            return f"Error calling OpenAI API: {e!r}"
 
     def _call_anthropic(self, prompt: str, context: str) -> str:
         """Anthropic-compatible REST execution via pure stdlib urllib."""
         headers: dict[str, str] = {
             "Content-Type": "application/json",
             "x-api-key": self.external_api_key,
-            "anthropic-version": "2023-06-01"
+            "anthropic-version": "2023-06-01",
         }
-        
+
         payload: dict[str, Any] = {
             "model": self.main_model_name,
             "system": f"Use the following codebase context to assist the user:\n{context}",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            **self.main_model_params
+            "messages": [{"role": "user", "content": prompt}],
+            **self.main_model_params,
         }
-        
-        req: Any = urllib.request.Request(self.main_inference_url, headers=headers, data=json.dumps(payload).encode("utf-8"))
+
+        req: Any = urllib.request.Request(
+            self.main_inference_url,
+            headers=headers,
+            data=json.dumps(payload).encode("utf-8"),
+        )
         try:
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read().decode("utf-8"))
@@ -423,42 +559,40 @@ class GrepRAG:
         except urllib.error.URLError as e:
             return f"Error calling Anthropic API (URLError): {e!r}"
 
-
     def process(self, prompt: str, repo_path: str, top_k: int = 20) -> str:
         """
         The main pipeline execution: Generates intents, executes grep, scores ASTs, and yields inference.
-        
+
         Args:
             prompt (str): The user's codebase intent.
             repo_path (str): Local codebase root path.
             top_k (int): Number of top-ranked context blocks to relay to the LLM.
-            
+
         Returns:
             str: External LLM response.
         """
         queries: list[str] = self._generate_grep_queries(prompt)
         blocks: list[dict[str, Any]] = self._run_ripgrep(queries, repo_path)
         ranked_blocks: list[dict[str, Any]] = self._ast_weighted_rerank(blocks)
-        
+
         formatted_context: str = self._format_context(blocks=ranked_blocks[:top_k])
         return self._call_external_inference(prompt, context=formatted_context)
-
 
     async def process_async(self, prompt: str, repo_path: str, top_k: int = 20) -> str:
         """
         The main pipeline execution asynchronously: Generates intents, executes grep, scores ASTs, and yields inference.
-        
+
         Args:
             prompt (str): The user's codebase intent.
             repo_path (str): Local codebase root path.
             top_k (int): Number of top-ranked context blocks to relay to the LLM.
-            
+
         Returns:
             str: External LLM response.
         """
         queries: list[str] = self._generate_grep_queries(prompt)
         blocks: list[dict[str, Any]] = await self._run_ripgrep_async(queries, repo_path)
         ranked_blocks: list[dict[str, Any]] = self._ast_weighted_rerank(blocks)
-        
+
         formatted_context: str = self._format_context(ranked_blocks[:top_k])
         return self._call_external_inference(prompt, formatted_context)
