@@ -63,13 +63,15 @@ pip install -e ".[all-languages,dev]"
 ```
 
 ### Usage
-# 1. As a Python Library
+
+#### As a Python Library
+
 ```python
 from greprag import GrepRAG
 
 # Initialize pipeline
 rag = GrepRAG(
-    main_inference_url="[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)",
+    main_inference_url="https://api.openai.com/v1/chat/completions",
     main_model_name="gpt-4o",
     main_model_params={"temperature": 0.2, "max_tokens": 1024},
     grep_model_path_or_name="greprag0/greprag-0.6b",
@@ -91,6 +93,49 @@ response = rag.process(
 )
 
 print(response)
+```
+
+**Async usage:** `rag.process_async()` is an async wrapper supporting the same parameters; use it in async contexts with `await` or via `asyncio.run()`.
+
+**CUDA support:** The local grep model automatically uses GPU acceleration if available — no extra configuration needed. Performance on large repos may be noticeably better on CUDA devices.
+
+---
+
+#### Running as an MCP Server
+
+Once installed, the package provides a console script:
+
+```bash
+# Set required credentials
+export GREPRAG_EXTERNAL_API_KEY="sk-your-api-key"
+export GREPRAG_EXTERNAL_API_TYPE="openai"
+export GREPRAG_MAIN_MODEL_NAME="gpt-4o"
+
+# Run the FastMCP server
+greprag-server
+```
+
+**Default blacklist patterns:** `.git`, `node_modules`, `venv`, `__pycache__`, and `.pytest_cache` are excluded by default — you can customize them via `GREPRAG_BLACKLIST` or set `blacklist=[]` during initialization.
+
+---
+
+#### Claude Desktop Configuration (claude_desktop_config.json)
+
+Add the server to your configuration:
+```json
+{
+  "mcpServers": {
+    "greprag": {
+      "command": "greprag-server",
+      "env": {
+        "GREPRAG_EXTERNAL_API_KEY": "sk-your-api-key",
+        "GREPRAG_EXTERNAL_API_TYPE": "openai",
+        "GREPRAG_MAIN_MODEL_NAME": "gpt-4o",
+        "GREPRAG_GREP_MODEL_PATH": "greprag0/greprag-0.6b"
+      }
+    }
+  }
+}
 ```
 
 # 2. Running as an MCP Server
@@ -125,11 +170,28 @@ Add the server to your configuration:
 ```
 
 # Exposed MCP Tools
-- greprag_query_and_answer(prompt, repo_path, top_k): Executes the full GrepRAG workflow and returns the external LLM's answer.
 
-- greprag_retrieve_context(prompt, repo_path, top_k): Runs local grep generation, ripgrep search, and Tree-sitter ranking, returning raw formatted code blocks directly to the agent without invoking the external model.
+- **`greprag_query_and_answer(prompt, repo_path, top_k)`**: Full retrieval pipeline (regex query generation → ripgrep → AST-ranked results) followed by external LLM inference. The returned context is sent to the model together with your prompt — expect token costs proportional to `top_k` blocks (each block includes file path, line numbers, and code content). Use lower `top_k` values for tighter cost control.
+
+- **`greprag_retrieve_context(prompt, repo_path, top_k)`**: Pure retrieval step only. Runs the same local pipeline (regex → ripgrep → Tree-sitter ranking) but returns formatted code blocks without calling the external model. Ideal when you want to inspect or further process results yourself; no LLM token consumption from GrepRAG side.
+
+---
 
 ### Environment Variables Reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GREPRAG_MAIN_INFERENCE_URL` | https://api.openai.com/v1/chat/completions | Inference endpoint URL |
+| `GREPRAG_MAIN_MODEL_NAME` | gpt-4o | Model name sent in request payload |
+| `GREPRAG_MAIN_MODEL_PARAMS` | `{"temperature": 0.2, "max_tokens": 2048}` | JSON string of extra model parameters |
+| `GREPRAG_EXTERNAL_API_TYPE` | openai | Schema: `openai` or `anthropic` |
+| `GREPRAG_EXTERNAL_API_KEY` | *(required)* | API bearer token (OpenAI) or x-api-key (Anthropic) |
+| `GREPRAG_GREP_MODEL_PATH` | greprag0/greprag-0.6b | Local path or Hugging Face model identifier for the regex-generation model |
+| `GREPRAG_WHITELIST` | *(empty)* | Comma-separated include globs (e.g., `*.py,*.ts`) — overrides instance settings in server mode |
+| `GREPRAG_BLACKLIST` | `.git,node_modules,venv,__pycache__,.pytest_cache` | Comma-separated exclude globs — overrides instance settings in server mode |
+| `GREPRAG_CONTEXT_PADDING` | 2 | Lines of adjacent context to include per match (passed as `-C` to ripgrep) |
+
+*Note: When using the Python API, you can customize these via constructor arguments; the environment variables only affect the MCP server.*
 Variable	                  | Default             	                      | Description
 GREPRAG_MAIN_INFERENCE_URL	| https://api.openai.com/v1/chat/completions  |	Inference endpoint URL
 GREPRAG_MAIN_MODEL_NAME	    | gpt-4o                                      |	Model name sent in request payload
