@@ -3,6 +3,7 @@ Tests for the Anthropic API integration functionality.
 """
 
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,7 +15,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from grepRAG import GrepRAG
 
 
-@pytest.mark.skip(reason="Anthropic endpoint is not available in this CI/test environment")
+@pytest.mark.skipif(
+    not os.getenv("RUN_EXTERNAL_API_TESTS"),
+    reason="Anthropic endpoint is not available in this environment. Set RUN_EXTERNAL_API_TESTS=1 to run."
+)
 class TestAnthropicIntegration:
     """Test suite for Anthropic API integration functionality."""
 
