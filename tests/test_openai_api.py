@@ -3,6 +3,7 @@ Tests for the OpenAI API integration functionality.
 """
 
 import json
+import os
 import urllib
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +16,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from grepRAG import GrepRAG
 
 
+@pytest.mark.skipif(
+    not os.getenv("RUN_EXTERNAL_API_TESTS"),
+    reason="OpenAI endpoint is not available in this environment. Set RUN_EXTERNAL_API_TESTS=1 to run."
+)
 class TestOpenAIIntegration:
     """Test suite for OpenAI API integration functionality."""
 
@@ -179,4 +184,3 @@ class TestOpenAIIntegration:
 
             # Verify result
             assert isinstance(result, str), "Result should be a string"
-
