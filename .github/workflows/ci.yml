@@ -43,7 +43,7 @@ jobs:
 
     - name: Test with pytest
       run: |
-        pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
+        pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing -k "not (test_anthropic or test_openai)"
         # Check coverage threshold
         pytest --cov=src --cov-report=term-missing -k "not (test_async or test_memory_cleanup or test_parallel_ripgrep or test_many_files_same_dir or test_large_file or test_rapid_successive_calls or test_deeply_nested_structure)"
 

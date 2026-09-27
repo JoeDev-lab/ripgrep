@@ -20,7 +20,7 @@ def create_grep_rag() -> GrepRAG:
     # Use the local test model path
     test_model_path = Path(__file__).parent / "fixtures" / "test_models" / "greprag-0.6b"
     return GrepRAG(
-        main_inference_url="http://192.168.188.106/v1",
+        main_inference_url="test-api-key",
         main_model_name="Qwythos-9B",
         main_model_params={"max_tokens": 500, "temperature": 0.7},
         grep_model_path_or_name=str(test_model_path.resolve()),

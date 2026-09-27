@@ -24,7 +24,7 @@ class TestAnthropicIntegration:
         """Test that valid response returns expected structure."""
         # Create OpenAI-compatible instance (server is OpenAI-compliant)
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="http://192.168.188.106/v1",
+            main_inference_url="test-api-key",
             main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="tests/fixtures/greprag-0.6b",
@@ -67,7 +67,7 @@ class TestAnthropicIntegration:
         """Test that network error returns error string."""
         # Create OpenAI-compatible instance (server is OpenAI-compliant)
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="http://192.168.188.106/v1",
+            main_inference_url="test-api-key",
             main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="test-model",
@@ -96,7 +96,7 @@ class TestAnthropicIntegration:
     ) -> None:
         """Test that malformed JSON response handled."""
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="http://192.168.188.106/v1",
+            main_inference_url="test-api-key",
             main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="test-model",
@@ -128,7 +128,7 @@ class TestAnthropicIntegration:
     ) -> None:
         """Test that correct `x-api-key` header format."""
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="http://192.168.188.106/v1",
+            main_inference_url="test-api-key",
             main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="test-model",
@@ -166,7 +166,7 @@ class TestAnthropicIntegration:
     ) -> None:
         """Test that correct `anthropic-version` header."""
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="http://192.168.188.106/v1",
+            main_inference_url="test-api-key",
             main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="tests/fixtures/test_model/greprag-0.6b",
@@ -205,7 +205,7 @@ class TestAnthropicIntegration:
         """Test that response is array, not dict."""
         # OpenAI-compatible server endpoint
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="http://192.168.188.106/v1",
+            main_inference_url="test-api-key",
             main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="tests/fixtures/test_model/greprag-0.6b",
@@ -242,7 +242,7 @@ class TestAnthropicIntegration:
         """Test that `text` field extracted from content array."""
         # OpenAI-compatible server endpoint
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="http://192.168.188.106/v1",
+            main_inference_url="test-api-key",
             main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="tests/fixtures/test_model/greprag-0.6b",
@@ -293,7 +293,7 @@ class TestAnthropicIntegration:
         """Test that async version works correctly."""
         # OpenAI-compatible server endpoint
         anthropic_grep_rag = GrepRAG(
-            main_inference_url="http://192.168.188.106/v1",
+            main_inference_url="test-api-key",
             main_model_name="Qwythos-9B",
             main_model_params={"max_tokens": 500, "temperature": 0.7},
             grep_model_path_or_name="tests/fixtures/test_model/greprag-0.6b",
