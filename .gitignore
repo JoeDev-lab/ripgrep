@@ -113,9 +113,14 @@ docker-compose.override.json
 htmlcov/
 .tox/
 .python-version
+tests/
 
 # Notebook outputs
 *.ipynb_checkpoints
+
+# Build files
+greprag.egg-info/
+dist/
 
 # Agent files
 AGENTS.md
@@ -123,3 +128,4 @@ AGENTS.md
 .github/
 memories/
 */greprag-0.6b/
+reports/

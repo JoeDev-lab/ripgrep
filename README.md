@@ -4,10 +4,10 @@ A lightweight, drop-in Python module and FastMCP server implementing the **GrepR
 
 This project is a standalone, production-ready implementation inspired by the academic research behind GrepRAG, optimized for local agents and Model Context Protocol (MCP) clients.
 
-## 🔗 Acknowledgements & Resources
-* **Original Paper:** [GrepRAG: Injecting Exact Lexical Context for Code Generation](https://arxiv.org/abs/2406.14497)
-* **Official Academic Repo:** [ZJU-ACES-ISE/greprag](https://github.com/ZJU-ACES-ISE/greprag)
-* **Specialized Grep Model:** [`greprag0/greprag-0.6b`](https://huggingface.co/greprag0/greprag-0.6b) (Distilled 0.6B Qwen model fine-tuned to output targeted regex queries).
+## Acknowledgements & Resources
+* **Original Paper:** [GrepRAG: Injecting Exact Lexical Context for Code Generation](<https://arxiv.org/abs/2406.14497>)
+* **Official Academic Repo:** [ZJU-ACES-ISE/greprag](<https://github.com/ZJU-ACES-ISE/greprag>)
+* **Specialized Grep Model:** [`greprag0/greprag-0.6b`](<https://huggingface.co/greprag0/greprag-0.6b>) (Distilled 0.6B Qwen model fine-tuned to output targeted regex queries).
 
 ---
 
@@ -138,7 +138,8 @@ Add the server to your configuration:
 }
 ```
 
-# 2. Running as an MCP Server
+## Running as an MCP Server
+
 Once installed, the package provides a console script:
 
 ```bash
@@ -151,7 +152,8 @@ export GREPRAG_MAIN_MODEL_NAME="gpt-4o"
 greprag-server
 ```
 
-# Claude Desktop Configuration (claude_desktop_config.json)
+### Claude Desktop Configuration (claude_desktop_config.json)
+
 Add the server to your configuration:
 ```json
 {
@@ -179,26 +181,15 @@ Add the server to your configuration:
 
 ### Environment Variables Reference
 
-| Variable | Default | Description |
-|----------|---------|-------------|
 | `GREPRAG_MAIN_INFERENCE_URL` | https://api.openai.com/v1/chat/completions | Inference endpoint URL |
-| `GREPRAG_MAIN_MODEL_NAME` | gpt-4o | Model name sent in request payload |
-| `GREPRAG_MAIN_MODEL_PARAMS` | `{"temperature": 0.2, "max_tokens": 2048}` | JSON string of extra model parameters |
-| `GREPRAG_EXTERNAL_API_TYPE` | openai | Schema: `openai` or `anthropic` |
 | `GREPRAG_EXTERNAL_API_KEY` | *(required)* | API bearer token (OpenAI) or x-api-key (Anthropic) |
 | `GREPRAG_GREP_MODEL_PATH` | greprag0/greprag-0.6b | Local path or Hugging Face model identifier for the regex-generation model |
 | `GREPRAG_WHITELIST` | *(empty)* | Comma-separated include globs (e.g., `*.py,*.ts`) — overrides instance settings in server mode |
 | `GREPRAG_BLACKLIST` | `.git,node_modules,venv,__pycache__,.pytest_cache` | Comma-separated exclude globs — overrides instance settings in server mode |
 | `GREPRAG_CONTEXT_PADDING` | 2 | Lines of adjacent context to include per match (passed as `-C` to ripgrep) |
+| `GREPRAG_EXTERNAL_API_KEY` | *(required)* | API bearer token (OpenAI) or x-api-key (Anthropic) |
+| `GREPRAG_WHITELIST` | *(empty)* | Comma-separated include globs (e.g., `*.py,*.ts`) — overrides instance settings in server mode |
+| `GREPRAG_BLACKLIST` | `.git,node_modules,venv,__pycache__,.pytest_cache` | Comma-separated exclude globs — overrides instance settings in server mode |
+| `GREPRAG_CONTEXT_PADDING` | 2 | Lines of adjacent context to include per match (passed as `-C` to ripgrep) |
 
 *Note: When using the Python API, you can customize these via constructor arguments; the environment variables only affect the MCP server.*
-Variable	                  | Default             	                      | Description
-GREPRAG_MAIN_INFERENCE_URL	| https://api.openai.com/v1/chat/completions  |	Inference endpoint URL
-GREPRAG_MAIN_MODEL_NAME	    | gpt-4o                                      |	Model name sent in request payload
-GREPRAG_MAIN_MODEL_PARAMS	  | {"temperature": 0.2, "max_tokens": 2048}    | JSON string of extra model parameters
-GREPRAG_EXTERNAL_API_TYPE	  | openai	                                    | Schema: openai or anthropic
-GREPRAG_EXTERNAL_API_KEY	  | (None - Required)	                          | API bearer token or x-api-key
-GREPRAG_GREP_MODEL_PATH	    | greprag0/greprag-0.6b                       |	Local or Hugging Face model identifier
-GREPRAG_WHITELIST	          | ""                                          |	Comma-separated include globs (e.g. *.py,*.ts)
-GREPRAG_BLACKLIST	          | .git,node_modules,venv,...                  |	Comma-separated exclude globs
-GREPRAG_CONTEXT_PADDING	    | 2	                                          | Ripgrep context lines (-C)
